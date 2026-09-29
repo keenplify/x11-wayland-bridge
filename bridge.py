@@ -247,6 +247,13 @@ class Connection:
                 self.upstream.sendall(request)
         except (EOFError, ConnectionError, BrokenPipeError):
             pass
+        finally:
+            # A client can close while the upstream server is waiting for its
+            # next request. Wake the response thread so both sockets close.
+            try:
+                self.upstream.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
 
     def responses(self) -> None:
         while True:
