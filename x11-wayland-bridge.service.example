@@ -1,0 +1,12 @@
+[Unit]
+Description=X11 to KDE Wayland screenshot and idle bridge
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/libexec/x11-wayland-bridge/bridge.py --listen :99 --upstream :0
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target
