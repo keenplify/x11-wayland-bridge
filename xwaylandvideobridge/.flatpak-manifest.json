@@ -1,0 +1,52 @@
+{
+    "id": "org.kde.xwaylandvideobridge",
+    "branch": "master",
+    "runtime": "org.kde.Platform",
+    "runtime-version": "6.11",
+    "sdk": "org.kde.Sdk",
+    "command": "xwaylandvideobridge",
+    "tags": [
+        "nightly"
+    ],
+    "desktop-file-name-suffix": " (Nightly)",
+    "finish-args": [
+        "--device=all",
+        "--env=QT_LOGGING_DEBUG=*.debug=true qt.qpa.input*.debug=false",
+        "--own-name=org.kde.StatusNotifierItem-2-2",
+        "--share=ipc",
+        "--socket=wayland",
+        "--socket=x11",
+        "--talk-name=org.freedesktop.Notifications",
+        "--talk-name=org.freedesktop.portal.Desktop",
+        "--talk-name=org.kde.StatusNotifierWatcher"
+    ],
+    "modules": [
+        {
+            "name": "kpipewire",
+            "config-opts": [
+                "-DBUILD_TESTING=OFF"
+            ],
+            "buildsystem": "cmake-ninja",
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://invent.kde.org/plasma/kpipewire.git",
+                    "branch": "Plasma/6.7"
+                }
+            ]
+        },
+        {
+            "name": "xwaylandvideobridge",
+            "config-opts": [
+                "-DBUILD_TESTING=OFF"
+            ],
+            "buildsystem": "cmake-ninja",
+            "sources": [
+                {
+                    "type": "dir",
+                    "path": "."
+                }
+            ]
+        }
+    ]
+}

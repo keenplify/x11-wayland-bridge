@@ -47,9 +47,12 @@ This is an experimental proxy. It has been tested with a KDE Wayland desktop on 
 
 The Python proxy above and KDE's Xwayland Video Bridge are separate applications.
 The video bridge exposes portal screen sharing to X11 applications and has a
-system tray icon. This repository also stores the
-[`Run on startup` tray-menu patch](patches/xwaylandvideobridge-run-on-startup.patch)
-for that native KDE application.
+system tray icon. The complete customized native application source is included
+in [`xwaylandvideobridge/`](xwaylandvideobridge/), including the startup checkbox
+and persistent screen selection changes used by the installed bridge. Its CMake
+build files, icons, translations, and original license files are included too.
+The source is based on KDE Xwayland Video Bridge 0.5.3, commit `1a972a2`
+from https://github.com/KDE/xwaylandvideobridge.
 
 Right-click the video bridge icon and toggle **Run on startup**. The checkbox
 reflects the effective autostart entry. Checking it enables startup at graphical
@@ -58,35 +61,30 @@ Changes persist in
 `~/.config/autostart/org.kde.xwaylandvideobridge.desktop` (or the corresponding
 `XDG_CONFIG_HOME` directory). Existing launch commands, including a systemd
 launcher, are preserved. A disabled user entry also overrides the system-wide
-entry. If no user entry exists, the patch creates one for the running executable
+entry. If no user entry exists, the bridge creates one for the running executable
 with `--autostart`. Failed writes revert the checkbox and show a tray message.
 The checkbox is provided for native installations; Flatpak keeps its existing
 Background portal behavior.
 
-### Apply and build
+### Build the included source
 
-This patch was built and tested against KDE Xwayland Video Bridge 0.5.3,
-commit `1a972a2`. With this repository cloned next to the KDE source checkout:
+From the root of this repository:
 
 ```sh
-git clone https://github.com/KDE/xwaylandvideobridge.git
-cd xwaylandvideobridge
-git checkout 1a972a2
-git apply ../x11-wayland-bridge/patches/xwaylandvideobridge-run-on-startup.patch
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
+cmake -S xwaylandvideobridge -B xwaylandvideobridge/build -DCMAKE_BUILD_TYPE=Release
+cmake --build xwaylandvideobridge/build --parallel
 ```
 
 Building requires a C++20 compiler, CMake, Qt 6 development packages, KDE
 Frameworks 6 development packages, KPipeWire, and the XCB development packages
-listed in the KDE project's CMake configuration.
+listed in `xwaylandvideobridge/CMakeLists.txt` (including Extra CMake Modules).
 
 For the locally customized native bridge, install the binary at the path already
 used by its launcher, then restart its service when a capture interruption is
 acceptable:
 
 ```sh
-install -Dm755 build/bin/xwaylandvideobridge ~/.local/bin/xwaylandvideobridge-persistent
+install -Dm755 xwaylandvideobridge/build/bin/xwaylandvideobridge ~/.local/bin/xwaylandvideobridge-persistent
 systemctl --user restart xwaylandvideobridge-user.service
 ```
 
