@@ -2,15 +2,16 @@
 """Experimental X11 proxy for root screenshots and XScreenSaver idle queries.
 
 Run in the host desktop session with DISPLAY set to the real Xwayland display:
-    python3 xgetimage_wayland_bridge.py --listen :99
+    python3 bridge.py --listen :99
 Then run an X11 application with DISPLAY=:99. The proxy passes ordinary X11
 traffic through unchanged, replacing root-window GetImage replies and answering
-XScreenSaver QueryVersion/QueryInfo with KDE Wayland idle notifications.
+XScreenSaver QueryVersion/QueryInfo using compositor idle information.
 """
 
 from __future__ import annotations
 
 import argparse
+import io
 import ctypes
 import os
 import signal
@@ -68,6 +69,33 @@ class IdleMonitor:
         return 0 if self.since is None else min(0xFFFFFFFF, max(0, int((time.monotonic() - self.since) * 1000)))
 
 
+class GnomeIdleMonitor:
+    """Query the compositor's real idle counter through its session D-Bus API."""
+    def __init__(self):
+        from gi.repository import Gio
+        self.proxy = Gio.DBusProxy.new_for_bus_sync(
+            Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None,
+            "org.gnome.Mutter.IdleMonitor", "/org/gnome/Mutter/IdleMonitor/Core",
+            "org.gnome.Mutter.IdleMonitor", None)
+        self.milliseconds()
+
+    def milliseconds(self):
+        from gi.repository import Gio
+        result = self.proxy.call_sync("GetIdletime", None, Gio.DBusCallFlags.NONE, 2000, None)
+        return min(0xFFFFFFFF, result.unpack()[0])
+
+CAPTURE_BACKEND = "spectacle"
+
+def capture_selected(screen):
+    result = subprocess.run([str(Path(__file__).with_name("capture-selected"))],
+                            capture_output=True, timeout=15)
+    if result.returncode:
+        raise RuntimeError(result.stderr.decode(errors="replace"))
+    from PIL import ImageOps
+    with Image.open(io.BytesIO(result.stdout)) as source:
+        return ImageOps.pad(source.convert("RGB"), (screen.width, screen.height), color="black")
+
+
 def read_exact(sock: socket.socket, count: int) -> bytes:
     chunks = []
     while count:
@@ -101,7 +129,7 @@ def xauthority_cookie(display_number: str) -> bytes:
             fields.append(data[offset : offset + size])
             offset += size
         _address, number, name, cookie = fields
-        if name == b"MIT-MAGIC-COOKIE-1" and number == display_number.encode():
+        if name == b"MIT-MAGIC-COOKIE-1" and number in (display_number.encode(), b""):
             candidates.append(cookie)
     if not candidates:
         raise RuntimeError(f"no MIT-MAGIC-COOKIE-1 entry for display :{display_number}")
@@ -172,6 +200,8 @@ def parse_screen(setup: bytes, order: str) -> Screen:
 
 
 def capture_desktop(screen: Screen) -> Image.Image:
+    if CAPTURE_BACKEND == "selected":
+        return capture_selected(screen)
     with tempfile.TemporaryDirectory(prefix="xgetimage-bridge-") as directory:
         filename = Path(directory) / "desktop.png"
         command = ["spectacle", "--background", "--nonotify", "--fullscreen", "--output", str(filename)]
@@ -325,14 +355,24 @@ def serve_client(client: socket.socket, upstream_path: Path, cookie: bytes, idle
 
 
 def main() -> None:
-    from PyQt6.QtGui import QGuiApplication
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--listen", default=":99", help="new local X11 display (default: :99)")
     parser.add_argument("--upstream", default=os.environ.get("DISPLAY", ":0"), help="real local X11 display")
+    parser.add_argument("--desktop", choices=("auto", "gnome", "kde"), default="auto")
+    parser.add_argument("--capture", choices=("auto", "selected", "spectacle"), default="auto")
     args = parser.parse_args()
-    app = QGuiApplication(sys.argv[:1])
-    idle = IdleMonitor()
+    gnome = args.desktop == "gnome" or (args.desktop == "auto" and "GNOME" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper())
+    global CAPTURE_BACKEND
+    CAPTURE_BACKEND = ("selected" if gnome else "spectacle") if args.capture == "auto" else args.capture
+    if gnome:
+        from gi.repository import GLib
+        app = GLib.MainLoop()
+        idle = GnomeIdleMonitor()
+    else:
+        from PyQt6.QtGui import QGuiApplication
+        app = QGuiApplication(sys.argv[:1])
+        idle = IdleMonitor()
     listen_path = display_socket(args.listen)
     upstream_path = display_socket(args.upstream)
     if listen_path == upstream_path:
@@ -367,7 +407,7 @@ def main() -> None:
 
     threading.Thread(target=accept_clients, daemon=True).start()
     try:
-        app.exec()
+        app.run() if gnome else app.exec()
     except (KeyboardInterrupt, SystemExit):
         pass
     finally:

@@ -1,13 +1,35 @@
-# X11 → KDE Wayland bridge
+# X11 → Wayland bridge
 
-A local X11 protocol proxy for legacy applications running on a KDE Wayland desktop, including applications in `muvm`. It currently provides two APIs:
+A local X11 protocol proxy for legacy applications running on a GNOME or KDE Wayland desktop, including applications in `muvm`. It currently provides two APIs:
 
 - Root-window `XGetImage` in `ZPixmap` format. Pixels come from a KDE Spectacle fullscreen capture.
 - `MIT-SCREEN-SAVER` `QueryVersion` and `QueryInfo`. Idle milliseconds are derived from KDE's Wayland idle and resume notifications through KIdleTime.
 
 Other X11 traffic is forwarded to the desktop's Xwayland server. Applications connect to the proxy display, for example `:99`, instead of the original display `:0`.
 
-## Requirements
+## GNOME (including muvm/FEX)
+
+GNOME uses Mutter's `org.gnome.Mutter.IdleMonitor.GetIdletime` API for idle time and the live source selected through Xwayland Video Bridge for screenshots. It does not use Spectacle or KIdleTime. Choose either a window or a monitor in the video bridge tray menu; changing that selection changes subsequent captures. The selected image is fitted into the X11 screen dimensions with black padding to preserve its aspect ratio. No selected source means capture fails and the original X11 response is returned.
+
+Install Python 3, Pillow, PyGObject (Gio/GLib), a C compiler, and Xlib development headers. On Arch Linux:
+
+```sh
+sudo pacman -S python-pillow python-gobject base-devel libx11
+cc -O2 capture-selected.c -lX11 -o capture-selected
+python3 bridge.py --desktop gnome --capture selected --listen :99 --upstream :0
+```
+
+Run the included native Xwayland Video Bridge (build instructions below), then select a source from its tray menu. Launch the legacy application through the proxy:
+
+```sh
+DISPLAY=:99 muvm --emu=fex /path/to/application-launcher
+```
+
+Stop any existing muvm instance first: its host display is fixed at VM startup. Do not stack an `XGetImage` preload adapter on this proxy. For shortcut startup, start the video bridge and the proxy user services before launching muvm with `DISPLAY=:99`. The proxy must inherit the current graphical session's `XAUTHORITY`, Wayland socket, and session D-Bus environment; do not hardcode a temporary Mutter authority filename. Mutter authority entries with an empty display number are supported.
+
+`--desktop auto` detects GNOME from `XDG_CURRENT_DESKTOP`; `--capture auto` selects this live-source backend on GNOME and Spectacle on KDE. Explicit `--capture selected` is also available on KDE.
+
+## KDE requirements
 
 Linux with KDE Plasma Wayland, Xwayland, Spectacle, Python 3, Pillow, PyQt6, and KDE Frameworks 6 KIdleTime. On Fedora, these are typically provided by `spectacle`, `python3-pillow`, `python3-pyqt6-base`, and `kf6-kidletime`. The process must run in the logged-in graphical session with access to its Wayland socket and Xauthority file.
 
@@ -92,3 +114,7 @@ Validation: rebuilt the native bridge; verified startup enable/disable persisten
 preservation of the existing systemd launcher and other desktop-entry groups,
 system-entry overrides, and write failures. Both checkbox states were also tested
 through the running tray menu, with the original startup configuration restored.
+
+### GNOME validation
+
+The GNOME backend was checked on GNOME Wayland on Asahi Linux: Mutter idle queries return through the proxy's XScreenSaver API, live selected-source root captures succeed both natively and through muvm/FEX, and missing video-bridge selections fail explicitly. Use `DISPLAY=:99` with an XGetImage client to check the live selected source after granting portal access. A source must be selected again after a fresh login when portal restore is unavailable.

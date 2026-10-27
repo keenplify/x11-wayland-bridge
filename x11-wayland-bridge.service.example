@@ -1,5 +1,5 @@
 [Unit]
-Description=X11 to KDE Wayland screenshot and idle bridge
+Description=X11 to Wayland screenshot and idle bridge
 After=graphical-session.target
 PartOf=graphical-session.target
 
