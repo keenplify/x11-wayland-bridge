@@ -7,6 +7,31 @@ A local X11 protocol proxy for legacy applications running on a GNOME or KDE Way
 
 Other X11 traffic is forwarded to the desktop's Xwayland server. Applications connect to the proxy display, for example `:99`, instead of the original display `:0`.
 
+## Install
+
+From the repository root, in your logged-in GNOME or KDE Wayland session:
+
+```sh
+./install.sh
+```
+
+This script:
+
+1. Installs any missing dependencies with `dnf` or `pacman`. It asks for sudo.
+2. Copies the bridge to `~/.local/libexec/x11-wayland-bridge`.
+3. Enables a `x11-wayland-bridge` systemd user service on display `:99`. The service starts at login.
+
+Then launch apps through the bridge:
+
+```sh
+DISPLAY=:99 your-x11-app
+DISPLAY=:99 muvm --emu=fex /path/to/application-launcher   # close any running muvm VM first
+```
+
+Options: `--listen :98` uses another display, `--with-videobridge` also builds and installs the customized Xwayland Video Bridge (needed for GNOME captures, see below), and `--uninstall` removes everything. Logs: `journalctl --user -u x11-wayland-bridge -f`.
+
+The rest of this document covers details and manual setup.
+
 ## GNOME (including muvm/FEX)
 
 GNOME uses Mutter's `org.gnome.Mutter.IdleMonitor.GetIdletime` API for idle time and the live source selected through Xwayland Video Bridge for screenshots. It does not use Spectacle or KIdleTime. Choose either a window or a monitor in the video bridge tray menu; changing that selection changes subsequent captures. The selected image is fitted into the X11 screen dimensions with black padding to preserve its aspect ratio. No selected source means capture fails and the original X11 response is returned.
@@ -33,7 +58,7 @@ Stop any existing muvm instance first: its host display is fixed at VM startup. 
 
 Linux with KDE Plasma Wayland, Xwayland, Spectacle, Python 3, Pillow, PyQt6, and KDE Frameworks 6 KIdleTime. On Fedora, these are typically provided by `spectacle`, `python3-pillow`, `python3-pyqt6-base`, and `kf6-kidletime`. The process must run in the logged-in graphical session with access to its Wayland socket and Xauthority file.
 
-## Run
+## Run manually
 
 ```sh
 python3 bridge.py --listen :99 --upstream :0
@@ -42,12 +67,7 @@ DISPLAY=:99 your-x11-app
 
 For `muvm`, set `DISPLAY=:99` on the host-side `muvm` command before starting its VM. An existing VM may need to be closed before its host display changes.
 
-To use the included systemd unit, replace the `ExecStart` path and `--upstream` display with values for your account, copy it to `~/.config/systemd/user/x11-wayland-bridge.service`, then run:
-
-```sh
-systemctl --user daemon-reload
-systemctl --user enable --now x11-wayland-bridge.service
-```
+`install.sh` sets this up as a systemd user service for you. `x11-wayland-bridge.service.example` shows the unit it writes.
 
 ## Scope and limitations
 
